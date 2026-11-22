@@ -36,4 +36,9 @@ public class MyTikaPptReader extends AbstractTikaReader {
         return "ppt";
     }
 
+    @Override
+    protected String title() {
+        return "家用空调产品说明书";
+    }
+
 }

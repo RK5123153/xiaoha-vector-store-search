@@ -24,6 +24,11 @@ public class MyJsonReader {
 
     private static final String FILENAME = "tv.json";
 
+    /**
+     * 来源标题，去掉扩展名。会拼进正文参与向量计算。
+     */
+    private static final String TITLE = "电视剧简介";
+
     private final Resource resource;
 
     public MyJsonReader(@Value("classpath:/document/" + FILENAME) Resource resource) {
@@ -41,9 +46,11 @@ public class MyJsonReader {
         // 固定 id，重复入库是覆盖写而不是追加
         List<Document> result = new ArrayList<>(documents.size());
         for (int i = 0; i < documents.size(); i++) {
-            result.add(StableId.of(documents.get(i), "json:" + FILENAME + ":" + i, Map.of(
-                    "sourceType", "json",
-                    "filename", FILENAME)));
+            result.add(Documents.withTitle(
+                    Documents.withId(documents.get(i), "json:" + FILENAME + ":" + i, Map.of(
+                            "sourceType", "json",
+                            "filename", FILENAME)),
+                    TITLE));
         }
         return result;
     }

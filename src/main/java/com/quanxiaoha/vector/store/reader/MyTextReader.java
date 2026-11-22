@@ -24,6 +24,11 @@ public class MyTextReader {
 
     private static final String FILENAME = "manual.txt";
 
+    /**
+     * 来源标题，去掉扩展名。会拼进正文参与向量计算。
+     */
+    private static final String TITLE = "海尔BCD-520WDPD对开门冰箱使用说明书";
+
     private final Resource resource;
 
     public MyTextReader(@Value("classpath:/document/" + FILENAME) Resource resource) {
@@ -42,7 +47,8 @@ public class MyTextReader {
         List<Document> documents = textReader.get();
         List<Document> result = new ArrayList<>(documents.size());
         for (int i = 0; i < documents.size(); i++) {
-            result.add(StableId.of(documents.get(i), "txt:" + FILENAME, Map.of()));
+            result.add(Documents.withTitle(
+                    Documents.withId(documents.get(i), "txt:" + FILENAME, Map.of()), TITLE));
         }
         return result;
     }
@@ -67,13 +73,13 @@ public class MyTextReader {
                 .build()
                 .apply(documents);
 
-        // 固定 id（用分块序号），重复入库是覆盖写而不是追加
+        // 固定 id（用分块序号）+ 带上来源标题，重复入库是覆盖写而不是追加
         List<Document> result = new ArrayList<>(splitDocuments.size());
         for (int i = 0; i < splitDocuments.size(); i++) {
             Document doc = splitDocuments.get(i);
             Object chunkIndex = doc.getMetadata().get("chunk_index");
             String id = "txt:" + FILENAME + ":c" + (chunkIndex != null ? chunkIndex : i);
-            result.add(StableId.of(doc, id, Map.of()));
+            result.add(Documents.withTitle(Documents.withId(doc, id, Map.of()), TITLE));
         }
         return result;
     }

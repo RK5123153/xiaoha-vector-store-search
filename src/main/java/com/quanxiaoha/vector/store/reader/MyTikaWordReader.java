@@ -36,4 +36,9 @@ public class MyTikaWordReader extends AbstractTikaReader {
         return "word";
     }
 
+    @Override
+    protected String title() {
+        return "星海电器售后服务手册";
+    }
+
 }

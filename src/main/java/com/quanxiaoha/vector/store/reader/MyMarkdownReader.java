@@ -24,6 +24,11 @@ public class MyMarkdownReader {
 
     private static final String FILENAME = "code.md";
 
+    /**
+     * 来源标题，去掉扩展名。会拼进正文参与向量计算。
+     */
+    private static final String TITLE = "Spring Security 安全配置示例";
+
     private final Resource resource;
 
     public MyMarkdownReader(@Value("classpath:/document/" + FILENAME) Resource resource) {
@@ -52,7 +57,8 @@ public class MyMarkdownReader {
         // 固定 id，重复入库是覆盖写而不是追加
         List<Document> result = new ArrayList<>(documents.size());
         for (int i = 0; i < documents.size(); i++) {
-            result.add(StableId.of(documents.get(i), "md:" + FILENAME + ":" + i, Map.of()));
+            result.add(Documents.withTitle(
+                    Documents.withId(documents.get(i), "md:" + FILENAME + ":" + i, Map.of()), TITLE));
         }
         return result;
     }

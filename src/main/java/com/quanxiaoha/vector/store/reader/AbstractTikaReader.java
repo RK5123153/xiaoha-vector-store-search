@@ -64,6 +64,11 @@ public abstract class AbstractTikaReader {
     protected abstract String sourceType();
 
     /**
+     * 来源标题，去掉扩展名。会拼进正文参与向量计算。
+     */
+    protected abstract String title();
+
+    /**
      * 读取并切分文档。
      */
     public List<Document> load() {
@@ -82,15 +87,17 @@ public abstract class AbstractTikaReader {
                 .build()
                 .apply(documents);
 
-        // 固定 id，重复入库是覆盖写而不是追加
+        // 固定 id + 带上来源标题，重复入库是覆盖写而不是追加
         List<Document> result = new ArrayList<>(splitDocuments.size());
         for (int i = 0; i < splitDocuments.size(); i++) {
             Document doc = splitDocuments.get(i);
             Object chunkIndex = doc.getMetadata().get("chunk_index");
             String id = sourceType() + ":" + filename() + ":c" + (chunkIndex != null ? chunkIndex : i);
-            result.add(StableId.of(doc, id, Map.of(
-                    "sourceType", sourceType(),
-                    "filename", filename())));
+            result.add(Documents.withTitle(
+                    Documents.withId(doc, id, Map.of(
+                            "sourceType", sourceType(),
+                            "filename", filename())),
+                    title()));
         }
         return result;
     }

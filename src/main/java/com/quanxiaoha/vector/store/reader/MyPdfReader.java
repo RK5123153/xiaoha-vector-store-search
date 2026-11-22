@@ -33,6 +33,11 @@ public class MyPdfReader {
 
     private static final String FILENAME = "BelieveInYou.pdf";
 
+    /**
+     * 来源标题，去掉扩展名。会拼进正文参与向量计算。
+     */
+    private static final String TITLE = "BelieveInYou";
+
     private static final String FILE_PATH = "classpath:/document/" + FILENAME;
 
     /**
@@ -59,7 +64,7 @@ public class MyPdfReader {
         // 读取并转换为 Document 文档集合
         List<Document> documents = pdfReader.read();
 
-        // 固定 id，重复入库是覆盖写而不是追加
+        // 固定 id + 带上来源标题，重复入库是覆盖写而不是追加
         List<Document> result = new ArrayList<>(documents.size());
         for (Document doc : documents) {
             // 合并模式下一条 Document 覆盖多页，page_number 是起始页、end_page_number 是结束页
@@ -72,10 +77,12 @@ public class MyPdfReader {
                     ? "pdf:" + FILENAME
                     : "pdf:" + FILENAME + ":p" + startPage;
 
-            result.add(StableId.of(doc, id, Map.of(
-                    "sourceType", "pdf",
-                    "filename", FILENAME,
-                    "pages", pages)));
+            result.add(Documents.withTitle(
+                    Documents.withId(doc, id, Map.of(
+                            "sourceType", "pdf",
+                            "filename", FILENAME,
+                            "pages", pages)),
+                    TITLE));
         }
         return result;
     }
