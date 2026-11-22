@@ -7,18 +7,20 @@ import com.quanxiaoha.vector.store.reader.MyPdfReader;
 import com.quanxiaoha.vector.store.reader.MyTikaPptReader;
 import com.quanxiaoha.vector.store.reader.MyTikaWordReader;
 import com.quanxiaoha.vector.store.reader.MyTextReader;
+import com.quanxiaoha.vector.store.service.DocumentIngestService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.ai.document.Document;
-import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -40,11 +42,11 @@ public class ReaderController {
     private final MyPdfReader pdfReader;
     private final MyTikaWordReader tikaWordReader;
     private final MyTikaPptReader tikaPptReader;
-    private final VectorStore vectorStore;
+    private final DocumentIngestService documentIngestService;
 
     public ReaderController(MyTextReader textReader, MyJsonReader jsonReader, MyMarkdownReader markdownReader,
                             MyHtmlReader htmlReader, MyPdfReader pdfReader, MyTikaWordReader tikaWordReader,
-                            MyTikaPptReader tikaPptReader, VectorStore vectorStore) {
+                            MyTikaPptReader tikaPptReader, DocumentIngestService documentIngestService) {
         this.textReader = textReader;
         this.jsonReader = jsonReader;
         this.markdownReader = markdownReader;
@@ -52,7 +54,7 @@ public class ReaderController {
         this.pdfReader = pdfReader;
         this.tikaWordReader = tikaWordReader;
         this.tikaPptReader = tikaPptReader;
-        this.vectorStore = vectorStore;
+        this.documentIngestService = documentIngestService;
     }
 
     /**
@@ -130,62 +132,26 @@ public class ReaderController {
     /**
      * 把指定格式的文档向量化后写入 Redis 向量库。
      *
-     * @param type txt / json / md / html / pdf / word / ppt / all
+     * @param type txt / json / md / html / pdf / word / ppt / all，多个用逗号分隔
      * @return 各格式写入的条数
      */
     @PostMapping(value = "/ingest")
-    @Operation(summary = "文档入库", description = "把指定格式的文档向量化后写入 Redis 向量库，重复调用是覆盖写不会产生重复数据")
+    @Operation(summary = "文档入库",
+            description = "把指定格式的文档向量化后写入 Redis 向量库。重复调用是覆盖写，不会产生重复数据。"
+                    + "type 支持 all（全部格式）或用逗号分隔的组合，如 pdf,word,ppt")
     public Map<String, Integer> ingest(
-            @Parameter(description = "文档格式：txt/json/md/html/pdf/word/ppt/all", example = "all")
+            @Parameter(description = "文档格式：txt/json/md/html/pdf/word/ppt/all，多个用逗号分隔", example = "all")
             @RequestParam(value = "type", defaultValue = "all") String type) {
-        Map<String, List<Document>> loaded = new LinkedHashMap<>();
-        if (matches(type, "txt")) {
-            // 长文本入库前先分块，否则单个超大向量会稀释语义
-            loaded.put("txt", textReader.loadTextAndSplit());
-        }
-        if (matches(type, "json")) {
-            loaded.put("json", jsonReader.loadJson());
-        }
-        if (matches(type, "md", "markdown")) {
-            // sourceType 取值与各 Reader 内部保持一致，避免过滤检索时对不上
-            loaded.put("markdown", markdownReader.loadMarkdown());
-        }
-        if (matches(type, "html")) {
-            loaded.put("html", htmlReader.loadHtml());
-        }
-        if (matches(type, "pdf")) {
-            loaded.put("pdf", pdfReader.getDocsFromPdf());
-        }
-        if (matches(type, "word", "docx")) {
-            loaded.put("word", tikaWordReader.load());
-        }
-        if (matches(type, "ppt", "pptx")) {
-            loaded.put("ppt", tikaPptReader.load());
-        }
-        if (loaded.isEmpty()) {
-            throw new IllegalArgumentException(
-                    "不支持的文档类型: " + type + "，可选值: txt/json/md/html/pdf/word/ppt/all");
-        }
-
-        Map<String, Integer> result = new LinkedHashMap<>();
-        loaded.forEach((key, documents) -> {
-            // sourceType 由各 Reader 自己写入，这里不再覆盖
-            vectorStore.add(documents);
-            result.put(key, documents.size());
-        });
-        return result;
+        return documentIngestService.ingest(type);
     }
 
-    private boolean matches(String type, String... candidates) {
-        if ("all".equalsIgnoreCase(type)) {
-            return true;
-        }
-        for (String candidate : candidates) {
-            if (candidate.equalsIgnoreCase(type)) {
-                return true;
-            }
-        }
-        return false;
+    /**
+     * 参数不合法时返回 400，而不是默认的 500。
+     */
+    @ExceptionHandler(IllegalArgumentException.class)
+    @ResponseStatus(HttpStatus.BAD_REQUEST)
+    public Map<String, String> handleIllegalArgument(IllegalArgumentException e) {
+        return Map.of("error", e.getMessage());
     }
 
 }

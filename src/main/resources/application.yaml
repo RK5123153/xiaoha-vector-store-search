@@ -17,7 +17,10 @@ springdoc:
 
 app:
   embedding-index:
-    enabled: true # 启动时把 PDF 文档写入 Redis（固定 id，重复启动只覆盖不追加）
+    enabled: true # 启动时把文档写入 Redis（固定 id，重复启动只覆盖不追加）
+    # 启动时灌入哪些格式：txt/json/md/html/pdf/word/ppt/all，多个用逗号分隔
+    # 只想灌 PDF 就写 pdf；不需要种子数据就设 enabled: false
+    sources: all
   rag:
     top-k: 5 # RAG 检索时取回多少条资料作为上下文
     similarity-threshold: 0.0 # 相似度阈值，低于该值的文档不进入上下文
