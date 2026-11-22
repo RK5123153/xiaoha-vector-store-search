@@ -1,6 +1,15 @@
 server:
   port: 8090 # 项目启动端口
 
+app:
+  embedding-index:
+    enabled: true # 启动时把演示文档写入 Redis（固定 id，重复启动只覆盖不追加）
+  reader:
+    pdf:
+      # 每个 Document 覆盖几页。0 = ALL_PAGES，整份 PDF 合成一条 Document（1 个 key / 1 个向量）
+      # 1 = 每页一条 Document（每页一个 key，检索能精确定位到页）
+      pages-per-document: 1
+
 spring:
   application:
     name: xiaoha-vector-store-search

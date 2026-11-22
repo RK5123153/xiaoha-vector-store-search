@@ -7,7 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Txt 文件读取器。
@@ -36,7 +38,13 @@ public class MyTextReader {
         // 添加自定义元数据，如文件名称
         textReader.getCustomMetadata().put("filename", FILENAME);
         textReader.getCustomMetadata().put("sourceType", "txt");
-        return textReader.get();
+
+        List<Document> documents = textReader.get();
+        List<Document> result = new ArrayList<>(documents.size());
+        for (int i = 0; i < documents.size(); i++) {
+            result.add(StableId.of(documents.get(i), "txt:" + FILENAME, Map.of()));
+        }
+        return result;
     }
 
     /**
@@ -50,7 +58,7 @@ public class MyTextReader {
         List<Document> documents = textReader.get();
 
         // 使用 TokenTextSplitter 对文档列表进行分块处理
-        return TokenTextSplitter.builder()
+        List<Document> splitDocuments = TokenTextSplitter.builder()
                 .withChunkSize(50) // 每个分块的目标 token 数
                 .withMinChunkSizeChars(20) // 标点符号截断阶段的字符下限
                 .withMinChunkLengthToEmbed(10) // 允许入库（embedding）的最小字符长度，小于此长度的块会被直接丢弃
@@ -58,6 +66,16 @@ public class MyTextReader {
                 .withKeepSeparator(true) // 是否在分块边界保留分隔符（标点符号）
                 .build()
                 .apply(documents);
+
+        // 固定 id（用分块序号），重复入库是覆盖写而不是追加
+        List<Document> result = new ArrayList<>(splitDocuments.size());
+        for (int i = 0; i < splitDocuments.size(); i++) {
+            Document doc = splitDocuments.get(i);
+            Object chunkIndex = doc.getMetadata().get("chunk_index");
+            String id = "txt:" + FILENAME + ":c" + (chunkIndex != null ? chunkIndex : i);
+            result.add(StableId.of(doc, id, Map.of()));
+        }
+        return result;
     }
 
 }

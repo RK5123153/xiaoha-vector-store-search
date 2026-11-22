@@ -7,7 +7,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Markdown 文件读取器。
@@ -45,7 +47,14 @@ public class MyMarkdownReader {
         MarkdownDocumentReader reader = new MarkdownDocumentReader(resource, config);
 
         // 读取并转换为 Document 文档集合
-        return reader.get();
+        List<Document> documents = reader.get();
+
+        // 固定 id，重复入库是覆盖写而不是追加
+        List<Document> result = new ArrayList<>(documents.size());
+        for (int i = 0; i < documents.size(); i++) {
+            result.add(StableId.of(documents.get(i), "md:" + FILENAME + ":" + i, Map.of()));
+        }
+        return result;
     }
 
 }

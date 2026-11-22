@@ -6,7 +6,9 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.io.Resource;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Json 文件读取器。
@@ -35,11 +37,15 @@ public class MyJsonReader {
         // 创建 JsonReader 阅读器实例，配置需要读取的字段
         JsonReader jsonReader = new JsonReader(resource, "description", "content", "title");
         List<Document> documents = jsonReader.get();
-        documents.forEach(doc -> {
-            doc.getMetadata().put("sourceType", "json");
-            doc.getMetadata().put("filename", FILENAME);
-        });
-        return documents;
+
+        // 固定 id，重复入库是覆盖写而不是追加
+        List<Document> result = new ArrayList<>(documents.size());
+        for (int i = 0; i < documents.size(); i++) {
+            result.add(StableId.of(documents.get(i), "json:" + FILENAME + ":" + i, Map.of(
+                    "sourceType", "json",
+                    "filename", FILENAME)));
+        }
+        return result;
     }
 
 }

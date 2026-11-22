@@ -124,7 +124,7 @@ public class ReaderController {
 
         Map<String, Integer> result = new LinkedHashMap<>();
         loaded.forEach((key, documents) -> {
-            documents.forEach(doc -> doc.getMetadata().put("sourceType", key));
+            // sourceType 由各 Reader 自己写入，这里不再覆盖
             vectorStore.add(documents);
             result.put(key, documents.size());
         });
