@@ -1,9 +1,26 @@
 server:
   port: 8090 # 项目启动端口
 
+# OpenAPI 文档：/swagger-ui.html 与 /v3/api-docs
+springdoc:
+  api-docs:
+    path: /v3/api-docs # OpenAPI JSON 描述文件
+    enabled: true
+  swagger-ui:
+    path: /swagger-ui.html # Swagger UI 页面
+    enabled: true
+    operations-sorter: method # 按方法名排序
+    tags-sorter: alpha # 按分组名排序
+    display-request-duration: true # 显示请求耗时
+  packages-to-scan: com.quanxiaoha.vector.store # 只扫描本项目的包
+  default-produces-media-type: application/json
+
 app:
   embedding-index:
-    enabled: true # 启动时把演示文档写入 Redis（固定 id，重复启动只覆盖不追加）
+    enabled: true # 启动时把 PDF 文档写入 Redis（固定 id，重复启动只覆盖不追加）
+  rag:
+    top-k: 5 # RAG 检索时取回多少条资料作为上下文
+    similarity-threshold: 0.0 # 相似度阈值，低于该值的文档不进入上下文
   reader:
     pdf:
       # 每个 Document 覆盖几页。0 = ALL_PAGES，整份 PDF 合成一条 Document（1 个 key / 1 个向量）
@@ -53,6 +70,18 @@ spring:
           # 注意：Redis 索引的向量维度在 FT.CREATE 时固定，修改此处后必须先删除旧索引再重启
           #   redis-cli FT.DROPINDEX xiaoha-ai-index
           dimensions: 1024
+
+    # 对话大模型：MiniMax。走 Anthropic 兼容接口，base-url 换成 MiniMax 官方域名即可。
+    # 用环境变量注入，key 不落到代码库里：MINIMAX_API_KEY / ANTHROPIC_BASE_URL
+    anthropic:
+      api-key: ${MINIMAX_API_KEY:${ANTHROPIC_AUTH_TOKEN:}}
+      base-url: ${MINIMAX_BASE_URL:${ANTHROPIC_BASE_URL:https://api.minimaxi.com/anthropic}}
+      chat:
+        options:
+          model: ${MINIMAX_MODEL:MiniMax-M3}
+          temperature: 0.0 # RAG 场景取 0，降低随机性、减少幻觉
+          max-tokens: 4096 # Anthropic Messages API 要求必须带 max_tokens
+
     vectorstore:
       redis:
         initialize-schema: true # 是否初始化模式

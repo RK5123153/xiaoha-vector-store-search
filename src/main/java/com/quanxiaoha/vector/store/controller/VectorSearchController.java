@@ -1,6 +1,8 @@
 package com.quanxiaoha.vector.store.controller;
 
-import jakarta.annotation.Resource;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -20,23 +22,32 @@ import java.util.List;
  */
 @RestController
 @RequestMapping("/vector")
+@Tag(name = "2. 向量检索", description = "在 Redis 向量库中做语义检索，可按来源格式过滤")
 public class VectorSearchController {
 
-    @Resource
-    private VectorStore vectorStore;
+    private final VectorStore vectorStore;
+
+    public VectorSearchController(VectorStore vectorStore) {
+        this.vectorStore = vectorStore;
+    }
 
     /**
      * 检索向量数据库
      *
      * @param key        查询关键词
      * @param topK       返回条数，默认 2
-     * @param sourceType 可选，按来源格式过滤，如 txt / json / markdown / html / pdf
+     * @param sourceType 可选，按来源格式过滤，如 txt / json / markdown / html / pdf / word / ppt
      * @return 命中的文档列表
      */
     @GetMapping(value = "/search")
-    public List<Document> search(@RequestParam(value = "key") String key,
-                                 @RequestParam(value = "topK", defaultValue = "2") int topK,
-                                 @RequestParam(value = "sourceType", required = false) String sourceType) {
+    @Operation(summary = "语义检索", description = "按语义相似度返回最相关的文档，结果按分数倒序")
+    public List<Document> search(
+            @Parameter(description = "查询关键词", example = "整机保修期是多久")
+            @RequestParam(value = "key") String key,
+            @Parameter(description = "返回条数", example = "5")
+            @RequestParam(value = "topK", defaultValue = "2") int topK,
+            @Parameter(description = "按来源格式过滤，留空不过滤", example = "pdf")
+            @RequestParam(value = "sourceType", required = false) String sourceType) {
         SearchRequest.Builder builder = SearchRequest.builder()
                 .query(key) // 查询的关键词
                 .topK(topK); // 返回相似度最高的 N 条文档
