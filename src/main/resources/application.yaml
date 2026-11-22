@@ -9,6 +9,12 @@ app:
       # 每个 Document 覆盖几页。0 = ALL_PAGES，整份 PDF 合成一条 Document（1 个 key / 1 个向量）
       # 1 = 每页一条 Document（每页一个 key，检索能精确定位到页）
       pages-per-document: 1
+    tika:
+      # Word / PPT 等 Office 文档的切块参数（Apache Tika 解析后切分）
+      chunk-size: 1000 # 每个分块的目标 token 数
+      min-chunk-size-chars: 400 # 标点符号截断阶段的字符下限
+      min-chunk-length-to-embed: 10 # 允许入库的最小字符长度，小于此长度的块会被丢弃
+      max-num-chunks: 5000 # 单个文档最多生成的块数
 
 spring:
   application:

@@ -4,6 +4,8 @@ import com.quanxiaoha.vector.store.reader.MyHtmlReader;
 import com.quanxiaoha.vector.store.reader.MyJsonReader;
 import com.quanxiaoha.vector.store.reader.MyMarkdownReader;
 import com.quanxiaoha.vector.store.reader.MyPdfReader;
+import com.quanxiaoha.vector.store.reader.MyTikaPptReader;
+import com.quanxiaoha.vector.store.reader.MyTikaWordReader;
 import com.quanxiaoha.vector.store.reader.MyTextReader;
 import org.springframework.ai.document.Document;
 import org.springframework.ai.vectorstore.VectorStore;
@@ -32,15 +34,20 @@ public class ReaderController {
     private final MyMarkdownReader markdownReader;
     private final MyHtmlReader htmlReader;
     private final MyPdfReader pdfReader;
+    private final MyTikaWordReader tikaWordReader;
+    private final MyTikaPptReader tikaPptReader;
     private final VectorStore vectorStore;
 
     public ReaderController(MyTextReader textReader, MyJsonReader jsonReader, MyMarkdownReader markdownReader,
-                            MyHtmlReader htmlReader, MyPdfReader pdfReader, VectorStore vectorStore) {
+                            MyHtmlReader htmlReader, MyPdfReader pdfReader, MyTikaWordReader tikaWordReader,
+                            MyTikaPptReader tikaPptReader, VectorStore vectorStore) {
         this.textReader = textReader;
         this.jsonReader = jsonReader;
         this.markdownReader = markdownReader;
         this.htmlReader = htmlReader;
         this.pdfReader = pdfReader;
+        this.tikaWordReader = tikaWordReader;
+        this.tikaPptReader = tikaPptReader;
         this.vectorStore = vectorStore;
     }
 
@@ -93,9 +100,25 @@ public class ReaderController {
     }
 
     /**
+     * 读取 Word 文档（Apache Tika 解析后分块）。
+     */
+    @GetMapping(value = "/word")
+    public List<Document> readWord() {
+        return tikaWordReader.load();
+    }
+
+    /**
+     * 读取 PPT 文档（Apache Tika 解析后分块）。
+     */
+    @GetMapping(value = "/ppt")
+    public List<Document> readPpt() {
+        return tikaPptReader.load();
+    }
+
+    /**
      * 把指定格式的文档向量化后写入 Redis 向量库。
      *
-     * @param type txt / json / md / html / pdf / all
+     * @param type txt / json / md / html / pdf / word / ppt / all
      * @return 各格式写入的条数
      */
     @PostMapping(value = "/ingest")
@@ -118,8 +141,15 @@ public class ReaderController {
         if (matches(type, "pdf")) {
             loaded.put("pdf", pdfReader.getDocsFromPdf());
         }
+        if (matches(type, "word", "docx")) {
+            loaded.put("word", tikaWordReader.load());
+        }
+        if (matches(type, "ppt", "pptx")) {
+            loaded.put("ppt", tikaPptReader.load());
+        }
         if (loaded.isEmpty()) {
-            throw new IllegalArgumentException("不支持的文档类型: " + type + "，可选值: txt/json/md/html/pdf/all");
+            throw new IllegalArgumentException(
+                    "不支持的文档类型: " + type + "，可选值: txt/json/md/html/pdf/word/ppt/all");
         }
 
         Map<String, Integer> result = new LinkedHashMap<>();
