@@ -1,0 +1,45 @@
+server:
+  port: 8090 # 项目启动端口
+
+spring:
+  application:
+    name: xiaoha-vector-store-search
+
+  profiles:
+    # 本地开发加载 application-local.yaml（存放 API Key 等敏感配置，已被 .gitignore 忽略）
+    active: local
+
+  data:
+    redis:
+      host: 192.168.100.101 # Redis URL 链接
+      port: 6379 # Redis 端口
+      client-type: jedis # Redis 客户端使用 Jedis
+      timeout: 5s # 命令读写超时
+      connect-timeout: 5s # 建立连接超时
+      jedis:
+        pool:
+          enabled: true # 开启连接池
+          max-active: 16 # 最大活跃连接数
+          max-idle: 8 # 最大空闲连接数
+          min-idle: 2 # 最小空闲连接数
+          max-wait: 3s # 等待可用连接的最长时间
+
+  ai:
+    openai:
+      # 阿里云百炼 OpenAI 兼容接口
+      # 若业务空间已授权本账号调用模型，可切换为空间专属域名：
+      #   https://ws-oi5air7biu557n9.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
+      base-url: ${DASHSCOPE_BASE_URL:https://dashscope.aliyuncs.com/compatible-mode/v1}
+      api-key: ${DASHSCOPE_API_KEY:} # 优先取环境变量；本地默认值见 application-local.yaml
+      embedding:
+        model: qwen3.7-text-embedding # 百炼当前最强文本向量模型，指令遵循较 text-embedding-v4 提升 16.4%
+        options:
+          # 官方推荐：语义检索效果与成本的最佳平衡点
+          # 注意：Redis 索引的向量维度在 FT.CREATE 时固定，修改此处后必须先删除旧索引再重启
+          #   redis-cli FT.DROPINDEX xiaoha-ai-index
+          dimensions: 1024
+    vectorstore:
+      redis:
+        initialize-schema: true # 是否初始化模式
+        index-name: xiaoha-ai-index # 自定义索引名称
+        prefix: embedding # 自定义键名前缀
