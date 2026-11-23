@@ -1,5 +1,6 @@
 package com.quanxiaoha.vector.store.config;
 
+import com.quanxiaoha.vector.store.util.ResilientDns;
 import okhttp3.ConnectionPool;
 import okhttp3.OkHttpClient;
 import org.springframework.beans.factory.annotation.Value;
@@ -48,6 +49,7 @@ public class OkHttpConfig {
                 .writeTimeout(writeTimeout, TimeUnit.MILLISECONDS)
                 .connectionPool(new ConnectionPool(maxIdleConnections, keepAliveDuration, TimeUnit.MINUTES))
                 .retryOnConnectionFailure(true) // 连接被对端断开时自动重试一次，避免偶发失败
+                .dns(new ResilientDns()) // 抓网页时域名解析失败很常见，用带重试的解析器兜住
                 .build();
     }
 

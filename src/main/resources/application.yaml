@@ -47,6 +47,12 @@ app:
     engines: bing,360search  # 聚合的搜索引擎，多个用逗号分隔，需与 SearXNG 实例实际启用的引擎一致
     language: zh-CN          # 搜索语言
     safesearch: 0            # 0-关闭 1-中等 2-严格
+  network: # 联网搜索增强参数（抓网页正文，拼增强提示词）
+    max-pages: 10            # 最多抓取多少个网页正文作为上下文（按相关性评分从高到低取）
+    concurrency: 8           # 并发抓取网页的线程数
+    content-length: 2000     # 每个网页最多保留多少字符正文
+    fetch-timeout: 15        # 单个网页抓取的超时时间（秒）
+    max-context-length: 20000 # 所有网页正文拼起来后的最大字符数，防止提示词超出模型上下文窗口
 
 spring:
   application:

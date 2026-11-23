@@ -21,6 +21,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
+import java.util.stream.StreamSupport;
 
 /**
  * SearXNG 联网搜索实现。
@@ -170,7 +172,35 @@ public class SearXNGServiceImpl implements SearXNGService {
                     node.path("publishedDate").asString(""), // 发布日期，没有则为空
                     null)); // 网页正文由后续小节抓取网页后填充
         }
+
+        checkEngines(root, list.size());
         return list;
+    }
+
+    /**
+     * 检查有没有搜索引擎掉链子。
+     * <p>
+     * SearXNG 会把失败的引擎放在 {@code unresponsive_engines} 里，形如
+     * {@code [["360search", "timeout"], ["bing", "HTTP connection error"]]}。
+     * 这个字段很关键：结果为空可能是「真的没搜到」，也可能是「搜索引擎全挂了」，
+     * 不区分开的话，调用方只能看到一个空列表，无从判断问题出在哪。
+     */
+    private void checkEngines(JsonNode root, int resultCount) {
+        JsonNode unresponsive = root.path("unresponsive_engines");
+        if (!unresponsive.isArray() || unresponsive.isEmpty()) {
+            return;
+        }
+        String detail = StreamSupport.stream(unresponsive.spliterator(), false)
+                .map(node -> {
+                    String engine = node.path(0).asString("");
+                    String reason = node.path(1).asString("");
+                    return reason.isBlank() ? engine : engine + "(" + reason + ")";
+                })
+                .collect(Collectors.joining(", "));
+        if (resultCount == 0) {
+            throw new SearXNGException("没有搜到结果，且以下搜索引擎不可用：" + detail);
+        }
+        log.warn("## SearXNG 部分搜索引擎不可用：{}（本次仍拿到 {} 条结果）", detail, resultCount);
     }
 
 }
