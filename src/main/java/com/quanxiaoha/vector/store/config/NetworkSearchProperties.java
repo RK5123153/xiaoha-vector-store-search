@@ -9,9 +9,9 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  * 三者直接决定最终提示词的大小 —— 页面越多、每页越长，模型要读的上下文就越长。
  *
  * @param maxPages      最多抓取多少个网页正文作为上下文（按相关性评分从高到低取）
- * @param concurrency   并发抓取网页的线程数
  * @param contentLength 每个网页最多保留多少字符正文
- * @param fetchTimeout  单个网页抓取的超时时间（秒）
+ * @param fetchTimeout  单次网页抓取的超时时间（秒）
+ * @param retries       单个网页抓取失败后的重试次数
  * @param maxContextLength 所有网页正文拼起来后的最大字符数，防止提示词超出模型上下文窗口
  * @Author: CFY
  * @create: 2026-11-23
@@ -19,8 +19,21 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 @ConfigurationProperties(prefix = "app.network")
 public record NetworkSearchProperties(
         int maxPages,
-        int concurrency,
         int contentLength,
         int fetchTimeout,
+        int retries,
         int maxContextLength) {
+
+    /**
+     * 单个网页的总等待预算（秒）。
+     * <p>
+     * 必须是「单次调用时限 × (1 + 重试次数)」：
+     * 如果任务等待上限和单次 HTTP 调用时限一样长，
+     * 第一次调用刚超时就先被判超时了，后面的重试根本轮不上执行。
+     *
+     * @return 单页总预算（秒）
+     */
+    public int fetchBudgetSeconds() {
+        return Math.max(1, fetchTimeout) * (Math.max(0, retries) + 1) + 1;
+    }
 }

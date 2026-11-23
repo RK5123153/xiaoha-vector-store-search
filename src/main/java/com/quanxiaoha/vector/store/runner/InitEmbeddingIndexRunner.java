@@ -34,6 +34,16 @@ public class InitEmbeddingIndexRunner implements ApplicationRunner {
     private static final Logger log = LoggerFactory.getLogger(InitEmbeddingIndexRunner.class);
 
     /**
+     * 启动时灌库最多尝试几次。
+     */
+    private static final int MAX_ATTEMPTS = 3;
+
+    /**
+     * 两次尝试之间的间隔（毫秒）。
+     */
+    private static final long RETRY_DELAY_MILLIS = 3000L;
+
+    /**
      * 启动时灌入哪些格式：txt/json/md/html/pdf/word/ppt/all，多个用逗号分隔。
      */
     @Value("${app.embedding-index.sources:all}")
@@ -48,11 +58,38 @@ public class InitEmbeddingIndexRunner implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) {
         // 读取文档 -> 向量化 -> 写入 Redis；id 固定 => 覆盖写，重复启动不会产生重复数据
-        Map<String, Integer> result = documentIngestService.ingest(sources);
+        //
+        // 这里刻意不让异常冒出去：灌库要调用外部的 embedding 模型（百炼 API），
+        // 一次 DNS 抖动或接口超时就把整个应用拖死并不划算 ——
+        // 种子数据只是「锦上添花」，真正要用时还能调 POST /read/ingest?type=all 手动补灌。
+        Exception lastError = null;
+        for (int attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+            try {
+                Map<String, Integer> result = documentIngestService.ingest(sources);
+                int total = result.values().stream().mapToInt(Integer::intValue).sum();
+                log.info("文档初始化完成，来源 [{}]，共写入 {} 条（{}），重复启动会覆盖写同一批 key",
+                        sources, total, result);
+                return;
+            } catch (Exception e) {
+                lastError = e;
+                log.warn("## 文档初始化第 {}/{} 次失败：{}", attempt, MAX_ATTEMPTS, e.getMessage());
+                if (attempt < MAX_ATTEMPTS) {
+                    sleep(RETRY_DELAY_MILLIS);
+                }
+            }
+        }
+        log.error("## 文档初始化最终失败，向量库里可能没有种子数据；"
+                + "可在服务启动后手动调用 POST /read/ingest?type=all 补灌。根因：{}",
+                lastError == null ? "未知" : lastError.getMessage(), lastError);
+    }
 
-        int total = result.values().stream().mapToInt(Integer::intValue).sum();
-        log.info("文档初始化完成，来源 [{}]，共写入 {} 条（{}），重复启动会覆盖写同一批 key",
-                sources, total, result);
+    private void sleep(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
 }
+

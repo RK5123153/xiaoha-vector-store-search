@@ -1,8 +1,10 @@
 package com.quanxiaoha.vector.store.controller;
 
+import com.quanxiaoha.vector.store.config.NetworkSearchProperties;
 import com.quanxiaoha.vector.store.exception.SearXNGException;
 import com.quanxiaoha.vector.store.model.SearchResult;
 import com.quanxiaoha.vector.store.service.NetworkSearchAssistantService;
+import com.quanxiaoha.vector.store.service.SearchResultContentFetcherService;
 import com.quanxiaoha.vector.store.service.SearXNGService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -20,6 +22,8 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 联网搜索：调用 SearXNG 聚合引擎，把各大搜索引擎去重后的结果取回来，
@@ -35,10 +39,59 @@ public class NetworkSearchController {
 
     private final SearXNGService searXNGService;
     private final NetworkSearchAssistantService assistantService;
+    private final SearchResultContentFetcherService contentFetcherService;
+    private final NetworkSearchProperties networkProperties;
 
-    public NetworkSearchController(SearXNGService searXNGService, NetworkSearchAssistantService assistantService) {
+    public NetworkSearchController(SearXNGService searXNGService, NetworkSearchAssistantService assistantService,
+                                   SearchResultContentFetcherService contentFetcherService,
+                                   NetworkSearchProperties networkProperties) {
         this.searXNGService = searXNGService;
         this.assistantService = assistantService;
+        this.contentFetcherService = contentFetcherService;
+        this.networkProperties = networkProperties;
+    }
+
+    /**
+     * 探测各个搜索引擎的可用状态。
+     * <p>
+     * 等价于 SearXNG 界面里展开的「响应时间」面板：
+     * 哪些引擎能出结果、哪些超时或连不上，一目了然。
+     * 网络有墙时，把不用的引擎在 SearXNG 那边禁用掉，搜索会快很多。
+     *
+     * @param message 探测用的关键词，留空用默认词
+     * @return 引擎名 -> 状态（正常 / 失败原因）
+     */
+    @GetMapping(value = "/engines")
+    @Operation(summary = "探测搜索引擎可用性", description = "返回 SearXNG 各搜索引擎的状态：正常 / 失败原因（超时、连接错误等）")
+    public Map<String, String> engines(
+            @Parameter(description = "探测用的关键词，留空则用默认词", example = "犬小哈教程")
+            @RequestParam(value = "message", required = false) String message) {
+        return searXNGService.probeEngines(message);
+    }
+
+    /**
+     * 联网搜索 + 批量抓取网页正文（教程里的测试接口）。
+     * <p>
+     * 走的是最直接的调用方式：先搜索，再把结果整批丢给
+     * {@link SearchResultContentFetcherService} 并发抓取，最后一次性返回。
+     *
+     * @param message 搜索关键词
+     * @param count   抓取多少个页面，不传则用配置里的条数
+     * @return 带网页正文的搜索结果列表
+     */
+    @GetMapping(value = "/test")
+    @Operation(summary = "联网搜索测试", description = "搜索并并发抓取网页正文，返回带正文的搜索结果，便于观察抓取效果")
+    public List<SearchResult> test(
+            @Parameter(description = "搜索关键词", example = "犬小哈教程")
+            @RequestParam(value = "message") String message,
+            @Parameter(description = "抓取多少个页面，不传则用配置值", example = "3")
+            @RequestParam(value = "count", required = false) Integer count) {
+        // 调用 SearXNG 获取搜索结果
+        List<SearchResult> searchResults = searXNGService.search(message, count);
+        // 并发请求，获取搜索结果页面的内容
+        CompletableFuture<List<SearchResult>> resultsFuture = contentFetcherService
+                .batchFetch(searchResults, networkProperties.fetchBudgetSeconds(), TimeUnit.SECONDS);
+        return resultsFuture.join();
     }
 
     /**

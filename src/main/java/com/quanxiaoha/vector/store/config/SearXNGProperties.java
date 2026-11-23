@@ -10,7 +10,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
  *
  * @param url        SearXNG 搜索接口地址，形如 {@code http://192.168.100.101:8888/search}
  * @param count      最多返回多少条搜索结果，同时也是接口返回条数的上限
- * @param engines    聚合的搜索引擎，多个用逗号分隔，需与 SearXNG 实例实际启用的引擎一致
+ * @param engines    聚合的搜索引擎，多个用逗号分隔；留空表示用 SearXNG 默认的全部已启用引擎
  * @param language   搜索语言
  * @param safesearch 安全搜索级别：0-关闭 1-中等 2-严格
  * @Author: CFY

@@ -44,14 +44,17 @@ app:
   searxng: # SearXNG 搜索引擎配置
     url: http://192.168.100.101:8888/search # SearXNG 服务的 API 端点地址
     count: 50                # 每次从搜索结果中，提取的最大数量（也是接口返回条数的上限）
-    engines: bing,360search  # 聚合的搜索引擎，多个用逗号分隔，需与 SearXNG 实例实际启用的引擎一致
+    # 聚合的搜索引擎，多个用逗号分隔。留空 = 用 SearXNG 默认的全部已启用引擎，
+    # 这样在 SearXNG 界面里勾选新引擎后这边不用改；
+    # 想固定用哪几个（比如跳过墙掉的）就写死，如 bing,360search
+    engines: ""
     language: zh-CN          # 搜索语言
     safesearch: 0            # 0-关闭 1-中等 2-严格
   network: # 联网搜索增强参数（抓网页正文，拼增强提示词）
     max-pages: 10            # 最多抓取多少个网页正文作为上下文（按相关性评分从高到低取）
-    concurrency: 8           # 并发抓取网页的线程数
     content-length: 2000     # 每个网页最多保留多少字符正文
-    fetch-timeout: 15        # 单个网页抓取的超时时间（秒）
+    fetch-timeout: 15        # 单次网页抓取的超时时间（秒）
+    retries: 1               # 单个网页抓取失败后的重试次数（有些站点会间歇性丢连接）
     max-context-length: 20000 # 所有网页正文拼起来后的最大字符数，防止提示词超出模型上下文窗口
 
 spring:

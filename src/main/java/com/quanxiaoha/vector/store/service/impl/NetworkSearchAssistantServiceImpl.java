@@ -1,9 +1,10 @@
 package com.quanxiaoha.vector.store.service.impl;
 
 import com.quanxiaoha.vector.store.config.NetworkSearchProperties;
+import com.quanxiaoha.vector.store.exception.SearXNGException;
 import com.quanxiaoha.vector.store.model.SearchResult;
 import com.quanxiaoha.vector.store.service.NetworkSearchAssistantService;
-import com.quanxiaoha.vector.store.service.PageContentService;
+import com.quanxiaoha.vector.store.service.SearchResultContentFetcherService;
 import com.quanxiaoha.vector.store.service.SearXNGService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -13,9 +14,14 @@ import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * 联网搜索问答实现。
@@ -45,16 +51,27 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
      */
     private static final String NO_CONTENT_MESSAGE = "未能获取到任何网页正文，可能是目标站点访问受限，请稍后重试。";
 
+    /**
+     * 模型返回空内容时的兜底提示。
+     */
+    private static final String EMPTY_ANSWER_MESSAGE = "模型没有返回任何内容，请稍后重试。";
+
+    /**
+     * 判断两个页面内容是否重复时，取正文开头多少个字符做指纹。
+     */
+    private static final int FINGERPRINT_LENGTH = 200;
+
     private final SearXNGService searXNGService;
-    private final PageContentService pageContentService;
+    private final SearchResultContentFetcherService contentFetcherService;
     private final ChatClient chatClient;
     private final PromptTemplate promptTemplate;
     private final NetworkSearchProperties properties;
 
-    public NetworkSearchAssistantServiceImpl(SearXNGService searXNGService, PageContentService pageContentService,
+    public NetworkSearchAssistantServiceImpl(SearXNGService searXNGService,
+                                             SearchResultContentFetcherService contentFetcherService,
                                              ChatClient chatClient, NetworkSearchProperties properties) {
         this.searXNGService = searXNGService;
-        this.pageContentService = pageContentService;
+        this.contentFetcherService = contentFetcherService;
         this.chatClient = chatClient;
         this.properties = properties;
         // 模板在启动时就加载好：文件缺失要立刻暴露，而不是等用户提问才报错
@@ -65,8 +82,24 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
     public List<SearchResult> searchPages(String question) {
         // 第一步：搜索。SearXNG 返回的结果已按相关性评分排好序
         List<SearchResult> results = searXNGService.search(question);
-        // 第二步：并发抓取前 N 个网页的正文
-        return pageContentService.fillPageContent(results);
+        // 第二步：只抓相关性评分最高的前 N 个页面（页面越多，提示词越长、模型越慢）
+        List<SearchResult> targets = results.stream()
+                .limit(Math.max(1, properties.maxPages()))
+                .toList();
+        // 第三步：并发抓取网页正文
+        long budget = properties.fetchBudgetSeconds();
+        try {
+            // 用 get 带超时，而不是无参 join()：万一某个任务卡住，不至于把请求线程一直占着
+            return contentFetcherService.batchFetch(targets, budget, TimeUnit.SECONDS)
+                    .get(budget + 5L, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            throw new SearXNGException("抓取网页正文超时（" + (budget + 5) + " 秒）", e);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new SearXNGException("抓取网页正文被中断", e);
+        } catch (ExecutionException e) {
+            throw new SearXNGException("抓取网页正文失败：" + e.getCause().getMessage(), e.getCause());
+        }
     }
 
     @Override
@@ -86,10 +119,12 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
         }
         String prompt = buildPrompt(question, pages);
         log.info("## 增强提示词长度：{} 字符", prompt.length());
-        return chatClient.prompt()
+        String answer = chatClient.prompt()
                 .user(prompt) // 模板里已经包含「用户问题 + 上下文 + 任务要求」
                 .call()
                 .content();
+        // 模型偶尔会返回空内容，这时给个说明，别让调用方拿到一个空 body
+        return answer == null || answer.isBlank() ? EMPTY_ANSWER_MESSAGE : answer;
     }
 
     @Override
@@ -112,9 +147,14 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
      * <p>
      * 每段前面标上「来源序号 + 相关性评分」，
      * 让模型知道哪些页面更可信 —— 评分高的内容优先采信。
+     * <p>
+     * 还会跳过内容重复的页面：搜索引擎经常会给出同一个页面的不同地址
+     * （比如 {@code /page/1} 和 {@code /page/1/}），正文一模一样，
+     * 重复塞进上下文既浪费配额，也会让模型误以为有两个来源在互相印证。
      */
     private String buildContext(List<SearchResult> pages) {
         StringBuilder context = new StringBuilder();
+        Set<String> seen = new HashSet<>();
         int source = 1;
         int used = 0;
         int limit = Math.max(1, properties.maxContextLength());
@@ -123,6 +163,10 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
             String text = page.pageContent();
             if (text == null || text.isBlank()) {
                 continue; // 没抓到正文的页面直接跳过
+            }
+            if (!seen.add(fingerprint(text))) {
+                log.debug("## 跳过内容重复的页面：{}", page.url());
+                continue;
             }
             int remaining = limit - used;
             if (remaining <= 0) {
@@ -139,6 +183,16 @@ public class NetworkSearchAssistantServiceImpl implements NetworkSearchAssistant
             used += text.length();
         }
         return context.toString();
+    }
+
+    /**
+     * 用正文开头的一段做指纹，判断两个页面的内容是不是同一份。
+     * <p>
+     * 只取开头几百个字符：同一个页面的不同地址，正文通常完全一致；
+     * 而不同页面的开头几乎不会撞车（标题和首段都不一样）。
+     */
+    private String fingerprint(String text) {
+        return text.substring(0, Math.min(FINGERPRINT_LENGTH, text.length())).trim();
     }
 
     private boolean hasContent(List<SearchResult> pages) {
