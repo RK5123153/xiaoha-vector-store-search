@@ -37,6 +37,7 @@ public class OpenApiConfig {
                                 | 文档读取 `/read` | 把 txt / json / markdown / html / pdf / word / ppt 解析成 Document |
                                 | 向量检索 `/vector` | 语义检索 Redis 向量库，支持按来源格式过滤 |
                                 | RAG 问答 `/rag` | 先检索向量库再让大模型基于资料作答，流式 / 非流式 |
+                                | 联网搜索 `/network` | 调用 SearXNG 聚合引擎，获取各大搜索引擎去重后的结果 |
                                 """)
                         .version("1.0.0")
                         .contact(new Contact().name("犬小哈"))

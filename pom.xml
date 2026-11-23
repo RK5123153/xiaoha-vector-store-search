@@ -34,6 +34,8 @@
         <!-- OpenAPI 文档版本（3.x 对应 Spring Boot 4） -->
         <springdoc.version>3.2.1</springdoc.version>
         <lombok.version>1.18.30</lombok.version>
+        <!-- OKHttp 版本（Spring Boot 未托管该依赖，需自行指定） -->
+        <okhttp.version>4.12.0</okhttp.version>
     </properties>
 
     <!-- Spring AI 依赖管理   -->
@@ -107,6 +109,13 @@
         <dependency>
             <groupId>org.springframework.ai</groupId>
             <artifactId>spring-ai-vector-store-advisor</artifactId>
+        </dependency>
+
+        <!-- OKHttp：调用 SearXNG 联网搜索接口 -->
+        <dependency>
+            <groupId>com.squareup.okhttp3</groupId>
+            <artifactId>okhttp</artifactId>
+            <version>${okhttp.version}</version>
         </dependency>
 
         <!-- OpenAPI 文档：/swagger-ui.html 与 /v3/api-docs -->
